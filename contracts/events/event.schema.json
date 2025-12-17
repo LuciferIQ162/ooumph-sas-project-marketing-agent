@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event",
+  "type": "object",
+  "required": ["tenant_id", "event_type", "occurred_at"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "event_type": {"type": "string", "enum": ["page_view", "click", "form_submit", "purchase", "email_open", "email_click", "ad_impression", "ad_click", "conversion"]},
+    "source": {"type": "string"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "session_id": {"type": "string"},
+    "visitor_id": {"type": "string"},
+    "lead_id": {"type": "string", "format": "uuid"},
+    "campaign_id": {"type": "string", "format": "uuid"},
+    "landing_page_id": {"type": "string", "format": "uuid"},
+    "email_id": {"type": "string", "format": "uuid"},
+    "ad_id": {"type": "string"},
+    "utm": {"type": "object"},
+    "referrer": {"type": "string"},
+    "device": {"type": "object"},
+    "geo": {"type": "object"},
+    "meta": {"type": "object"}
+  }
+}
+

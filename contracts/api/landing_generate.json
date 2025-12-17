@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LandingGenerateRequest",
+  "type": "object",
+  "required": ["tenant_id", "conversion_goal", "offer"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "conversion_goal": {"type": "string"},
+    "offer": {"type": "string"},
+    "assets": {"type": "array", "items": {"type": "string", "format": "uuid"}},
+    "campaign_id": {"type": "string", "format": "uuid"}
+  }
+}
+

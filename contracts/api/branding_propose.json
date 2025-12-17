@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BrandingProposeRequest",
+  "type": "object",
+  "required": ["tenant_id", "goals"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "goals": {"type": "object"},
+    "industry": {"type": "string"},
+    "competitors": {"type": "array", "items": {"type": "string"}},
+    "seed_materials": {"type": "array", "items": {"type": "string"}}
+  }
+}
+

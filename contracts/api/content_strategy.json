@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContentStrategyRequest",
+  "type": "object",
+  "required": ["tenant_id", "brand_core_id"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "brand_core_id": {"type": "string", "format": "uuid"},
+    "personas": {"type": "array", "items": {"type": "string", "format": "uuid"}},
+    "channels": {"type": "array", "items": {"type": "string"}},
+    "cadence": {"type": "string"}
+  }
+}
+

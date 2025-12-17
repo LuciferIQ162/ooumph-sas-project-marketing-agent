@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContentGenerateRequest",
+  "type": "object",
+  "required": ["tenant_id", "strategy_id", "types"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "strategy_id": {"type": "string", "format": "uuid"},
+    "types": {"type": "array", "items": {"type": "string", "enum": ["blog", "reel", "carousel", "ad"]}},
+    "count": {"type": "integer", "minimum": 1}
+  }
+}
+

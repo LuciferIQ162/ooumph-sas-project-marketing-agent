@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EmailSendRequest",
+  "type": "object",
+  "required": ["tenant_id", "channel", "template_id"],
+  "properties": {
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "channel": {"type": "string", "enum": ["email", "whatsapp"]},
+    "template_id": {"type": "string"},
+    "subject": {"type": "string"},
+    "body": {"type": "string"},
+    "lead_ids": {"type": "array", "items": {"type": "string", "format": "uuid"}},
+    "schedule_at": {"type": "string", "format": "date-time"},
+    "campaign_id": {"type": "string", "format": "uuid"}
+  }
+}
+
