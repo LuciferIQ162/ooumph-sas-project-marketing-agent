@@ -1,13 +1,13 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { Pinecone } from '@pinecone-database/pinecone';
 import Redis from 'ioredis';
-import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
-import { Queue, Worker, QueueScheduler } from 'bullmq';
+// import { createBullBoard } from '@bull-board/api';
+// import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+// import { ExpressAdapter } from '@bull-board/express';
+import { Queue, Worker } from 'bullmq';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,8 +28,7 @@ const supabase = createClient(
 );
 
 const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY!,
-  environment: process.env.PINECONE_ENVIRONMENT!
+  apiKey: process.env.PINECONE_API_KEY!
 });
 
 const redis = new Redis(process.env.REDIS_URL!);
@@ -39,20 +38,20 @@ const agentQueue = new Queue('agent-tasks', { connection: redis });
 const eventQueue = new Queue('events', { connection: redis });
 const workflowQueue = new Queue('workflows', { connection: redis });
 
-// Bull Board for monitoring queues
-const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
-
-createBullBoard({
-  queues: [
-    new BullMQAdapter(agentQueue),
-    new BullMQAdapter(eventQueue),
-    new BullMQAdapter(workflowQueue)
-  ],
-  serverAdapter
-});
-
-app.use('/admin/queues', serverAdapter.getRouter());
+// Bull Board for monitoring queues (commented out for now)
+// const serverAdapter = new ExpressAdapter();
+// serverAdapter.setBasePath('/admin/queues');
+// 
+// createBullBoard({
+//   queues: [
+//     new BullMQAdapter(agentQueue),
+//     new BullMQAdapter(eventQueue),
+//     new BullMQAdapter(workflowQueue)
+//   ],
+//   serverAdapter: serverAdapter
+// });
+// 
+// app.use('/admin/queues', serverAdapter.getRouter());
 
 // Multi-tenant middleware
 const requireTenant = async (req: any, res: any, next: any) => {
@@ -305,7 +304,164 @@ const workflowWorker = new Worker('workflows', async (job) => {
   // Implement workflow orchestration logic here
 }, { connection: redis });
 
+// Health check endpoints
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/health/detailed', async (req, res) => {
+  try {
+    const healthChecks = {
+      database: await checkDatabaseHealth(),
+      redis: await checkRedisHealth(),
+      pinecone: await checkPineconeHealth(),
+      server: {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        memory: process.memoryUsage(),
+        version: process.version
+      }
+    };
+
+    const overallHealth = Object.values(healthChecks).every(check => check.status === 'healthy');
+    
+    res.status(overallHealth ? 200 : 503).json({
+      status: overallHealth ? 'healthy' : 'unhealthy',
+      checks: healthChecks,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/metrics', async (req, res) => {
+  try {
+    const metrics = await getSystemMetrics();
+    res.set('Content-Type', 'text/plain');
+    res.send(metrics);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Health check functions
+async function checkDatabaseHealth() {
+  try {
+    const start = Date.now();
+    const { error } = await supabase.from('tenants').select('id').limit(1);
+    const responseTime = Date.now() - start;
+    
+    return {
+      status: error ? 'unhealthy' : 'healthy',
+      responseTime: `${responseTime}ms`,
+      error: error?.message
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      error: error.message
+    };
+  }
+}
+
+async function checkRedisHealth() {
+  try {
+    const start = Date.now();
+    await redis.ping();
+    const responseTime = Date.now() - start;
+    
+    return {
+      status: 'healthy',
+      responseTime: `${responseTime}ms`
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      error: error.message
+    };
+  }
+}
+
+async function checkPineconeHealth() {
+  try {
+    const start = Date.now();
+    await pinecone.listIndexes();
+    const responseTime = Date.now() - start;
+    
+    return {
+      status: 'healthy',
+      responseTime: `${responseTime}ms`
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      error: error.message
+    };
+  }
+}
+
+async function getSystemMetrics() {
+  const memoryUsage = process.memoryUsage();
+  const uptime = process.uptime();
+  const loadAvg = require('os').loadavg();
+  
+  const queueStats = await Promise.all([
+    agentQueue.getJobCounts(),
+    eventQueue.getJobCounts(),
+    workflowQueue.getJobCounts()
+  ]);
+
+  return `
+# HELP nodejs_memory_usage_bytes Memory usage in bytes
+# TYPE nodejs_memory_usage_bytes gauge
+nodejs_memory_usage_bytes{type="rss"} ${memoryUsage.rss}
+nodejs_memory_usage_bytes{type="heapUsed"} ${memoryUsage.heapUsed}
+nodejs_memory_usage_bytes{type="heapTotal"} ${memoryUsage.heapTotal}
+nodejs_memory_usage_bytes{type="external"} ${memoryUsage.external}
+
+# HELP process_uptime_seconds Process uptime in seconds
+# TYPE process_uptime_seconds gauge
+process_uptime_seconds ${uptime}
+
+# HELP system_load_average System load average
+# TYPE system_load_average gauge
+system_load_average_1m ${loadAvg[0]}
+system_load_average_5m ${loadAvg[1]}
+system_load_average_15m ${loadAvg[2]}
+
+# HELP bull_queue_jobs_total Total number of jobs in queue
+# TYPE bull_queue_jobs_total gauge
+bull_queue_jobs_total{queue="agent-tasks",status="waiting"} ${queueStats[0].waiting}
+bull_queue_jobs_total{queue="agent-tasks",status="active"} ${queueStats[0].active}
+bull_queue_jobs_total{queue="agent-tasks",status="completed"} ${queueStats[0].completed}
+bull_queue_jobs_total{queue="agent-tasks",status="failed"} ${queueStats[0].failed}
+
+bull_queue_jobs_total{queue="events",status="waiting"} ${queueStats[1].waiting}
+bull_queue_jobs_total{queue="events",status="active"} ${queueStats[1].active}
+bull_queue_jobs_total{queue="events",status="completed"} ${queueStats[1].completed}
+bull_queue_jobs_total{queue="events",status="failed"} ${queueStats[1].failed}
+
+bull_queue_jobs_total{queue="workflows",status="waiting"} ${queueStats[2].waiting}
+bull_queue_jobs_total{queue="workflows",status="active"} ${queueStats[2].active}
+bull_queue_jobs_total{queue="workflows",status="completed"} ${queueStats[2].completed}
+bull_queue_jobs_total{queue="workflows",status="failed"} ${queueStats[2].failed}
+  `.trim();
+}
+
 app.listen(PORT, () => {
   console.log(`🚀 Agentic Marketing SaaS server running on port ${PORT}`);
-  console.log(`📊 Queue monitoring available at http://localhost:${PORT}/admin/queues`);
+  // console.log(`📊 Queue monitoring available at http://localhost:${PORT}/admin/queues`);
+  console.log(`🏥 Health check available at http://localhost:${PORT}/health`);
+  console.log(`📈 Metrics available at http://localhost:${PORT}/metrics`);
 });
